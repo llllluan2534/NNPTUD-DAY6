@@ -1,10 +1,12 @@
 var express = require('express');
 var router = express.Router();
 let userController = require('../controllers/users')
-let { RegisterValidator, handleResultValidator } = require('../utils/validatorHandler')
+let { RegisterValidator, handleResultValidator, ChangePasswordValidator } = require('../utils/validatorHandler')
 let bcrypt = require('bcrypt')
 let jwt = require('jsonwebtoken')
 let {checkLogin} = require('../utils/authHandler')
+let fs = require('fs')
+let path = require('path')
 /* GET home page. */
 router.post('/register', RegisterValidator, handleResultValidator, async function (req, res, next) {
     let newUser = userController.CreateAnUser(
@@ -30,9 +32,11 @@ router.post('/login', async function (req, res, next) {
         }
         if (bcrypt.compareSync(password, getUser.password)) {
             await userController.SuccessLogin(getUser);
+            let privateKey = fs.readFileSync(path.join(__dirname, '../private_key.pem'), 'utf8')
             let token = jwt.sign({
                 id: getUser._id
-            },"secret",{
+            }, privateKey, {
+                algorithm: 'RS256',
                 expiresIn:'30d'
             })
             res.send(token)
@@ -47,5 +51,17 @@ router.get('/me',checkLogin,function(req,res,next){
     res.send(req.user)
 })
 
-
+router.post('/changepassword', checkLogin, ChangePasswordValidator, handleResultValidator, async function (req, res, next) {
+    let { oldpassword, newpassword } = req.body;
+    let user = req.user; // assigned in checkLogin middleware
+    if (bcrypt.compareSync(oldpassword, user.password)) {
+        user.password = newpassword;
+        await user.save();
+        res.send({
+            message: "Doi mat khau thanh cong"
+        })
+    } else {
+        res.status(400).send("Mat khau cu khong chinh xac");
+    }
+});
 module.exports = router;
